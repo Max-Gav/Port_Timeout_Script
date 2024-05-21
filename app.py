@@ -1,12 +1,88 @@
+import datetime
+
+import scapy.layers.l2
 from scapy.all import *
 from scapy.layers.inet import TCP
+import threading
+from scapy.layers.l2 import Ether
 
-def packet_callback(packet):
-    if packet.haslayer(Raw) and True:
-        # print(packet.summary())
-        print(packet[TCP].sport)
-        print(packet[TCP].dport)
-        print("Seq: " + str(packet[TCP].seq) + " ,Ack:" + str(packet[TCP].ack))
-        print("\n\n")
+PROXY_PORT = 443
+PROXY_SERVER = 421
+PROXY_DELAY = 10
+recv_queue = []
+sent_queue = []
+recv_status = False
+sent_status = False
+status_mutex = threading.Lock()
 
-sniff(prn=packet_callback, filter="tcp and port 443", store=0)
+def check_queues() -> None:
+    print(recv_queue)
+    print(sent_queue)
+    print("")
+    if recv_queue[0]:
+        found_flag = False
+
+        for index in range(0, 10):
+            if sent_queue[index]:
+                found_flag = True
+                break
+
+        if not found_flag:
+            print("Close Proxy")
+        else:
+            print("Successful check")
+
+    recv_queue.pop(0)
+    sent_queue.pop(0)
+
+
+def update_status() -> None:
+    global recv_status
+    global sent_status
+
+    with status_mutex:
+        recv_queue.append(recv_status)
+        sent_queue.append(sent_status)
+
+        recv_status = False
+        sent_status = False
+
+
+def proxy_check() -> None:
+    check_queues()
+    update_status()
+    threading.Timer(interval=1, function=proxy_check).start()
+
+
+def packet_callback(packet: Ether) -> None:
+    global recv_status
+    global sent_status
+
+    if packet[TCP].dport == PROXY_PORT:
+        print("Received")
+        with status_mutex:
+            recv_status = True
+
+    elif packet[TCP].dport == PROXY_SERVER:
+        print("Sent")
+        with status_mutex:
+            sent_status = True
+
+    # if packet.haslayer(Raw) and True:
+    #     print(packet.summary())
+    #     print(packet[TCP].sport)
+    #     print(packet[TCP].dport)
+    #     print("Seq: " + str(packet[TCP].seq) + " ,Ack:" + str(packet[TCP].ack))
+    #     print("\n\n")
+
+
+def fill_queues() -> None:
+    for i in range(0, PROXY_DELAY):
+        recv_queue.append(False)
+        sent_queue.append(False)
+
+
+if __name__ == '__main__':
+    fill_queues()
+    threading.Timer(interval=1, function=proxy_check).start()
+    sniff(prn=packet_callback, filter="tcp and port " + str(PROXY_PORT), store=0)

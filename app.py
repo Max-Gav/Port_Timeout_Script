@@ -1,13 +1,10 @@
-import datetime
-
-import scapy.layers.l2
-from scapy.all import *
-from scapy.layers.inet import TCP
 import threading
+from scapy.all import *
+from scapy.layers.inet import TCP, IP
 from scapy.layers.l2 import Ether
 
-PROXY_PORT = 443
-PROXY_SERVER = 421
+PROXY_PORT = 8080
+SERVER_PORT = 1236
 PROXY_DELAY = 10
 recv_queue = []
 sent_queue = []
@@ -63,7 +60,7 @@ def packet_callback(packet: Ether) -> None:
         with status_mutex:
             recv_status = True
 
-    elif packet[TCP].dport == PROXY_SERVER:
+    elif packet[TCP].dport == SERVER_PORT:
         print("Sent")
         with status_mutex:
             sent_status = True
@@ -85,4 +82,4 @@ def fill_queues() -> None:
 if __name__ == '__main__':
     fill_queues()
     threading.Timer(interval=1, function=proxy_check).start()
-    sniff(prn=packet_callback, filter="tcp and port " + str(PROXY_PORT), store=0)
+    sniff(prn=packet_callback, filter=f'tcp and ( port {PROXY_PORT} or port {SERVER_PORT} )', store=0)
